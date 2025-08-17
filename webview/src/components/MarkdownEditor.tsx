@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import mermaid from 'mermaid';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface MarkdownEditorProps {
   content: string;
@@ -9,34 +8,37 @@ interface MarkdownEditorProps {
   reviewStatus?: 'pending' | 'approved' | 'rejected';
   onReview?: (status: 'approved' | 'rejected') => void;
   onRegenerate?: () => void;
+  codebaseInfo?: any;
+  showPreviewAfterSave?: boolean;
+  isRequirements?: boolean;
 }
 
-const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ 
-  content, 
-  onChange, 
+type ViewMode = 'edit' | 'preview' | 'split';
+
+const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
+  content,
+  onChange,
   enableMermaid = false,
   reviewStatus = undefined,
   onReview,
-  onRegenerate
+  onRegenerate,
+  codebaseInfo,
+  showPreviewAfterSave = false,
+  isRequirements = false
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [editContent, setEditContent] = useState(content);
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setEditContent(content);
   }, [content]);
 
-  useEffect(() => {
-    if (enableMermaid) {
-      mermaid.initialize({ startOnLoad: true });
-      mermaid.run();
-    }
-  }, [content, enableMermaid]);
-
   // Debounced auto-save
   useEffect(() => {
-    if (isEditing) {
+    if (viewMode === 'edit' || viewMode === 'split') {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
       saveTimeout.current = setTimeout(() => {
         onChange(editContent);
@@ -45,29 +47,100 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [editContent, isEditing, onChange]);
+  }, [editContent, viewMode, onChange]);
+
+  // Synchronized scrolling
+  const handleEditorScroll = () => {
+    if (viewMode === 'split' && editorRef.current && previewRef.current) {
+      const editor = editorRef.current;
+      const preview = previewRef.current;
+      const scrollPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+      preview.scrollTop = scrollPercentage * (preview.scrollHeight - preview.clientHeight);
+    }
+  };
+
+  const handlePreviewScroll = () => {
+    if (viewMode === 'split' && editorRef.current && previewRef.current) {
+      const editor = editorRef.current;
+      const preview = previewRef.current;
+      const scrollPercentage = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
+      editor.scrollTop = scrollPercentage * (editor.scrollHeight - editor.clientHeight);
+    }
+  };
 
   const handleSave = () => {
     onChange(editContent);
-    setIsEditing(false);
+    if (isRequirements && showPreviewAfterSave) {
+      setViewMode('preview');
+    }
   };
 
   const handleCancel = () => {
     setEditContent(content);
-    setIsEditing(false);
+    setViewMode('preview');
   };
 
-  const MermaidComponent = ({ children }: { children: string }) => {
-    useEffect(() => {
-      mermaid.run();
-    });
-    
-    return <div className="mermaid">{children}</div>;
+
+
+  const CodebaseInfoComponent = () => {
+    if (!codebaseInfo || codebaseInfo.error) return null;
+
+    return (
+      <div className="codebase-info">
+        <h4>🔍 Existing Codebase Analysis</h4>
+
+        {codebaseInfo.technologies && codebaseInfo.technologies.length > 0 && (
+          <div className="tech-section">
+            <strong>Technologies Detected:</strong>
+            <div className="tech-badges">
+              {codebaseInfo.technologies.map((tech: string, index: number) => (
+                <span key={index} className="tech-badge">{tech}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {codebaseInfo.packageFiles && codebaseInfo.packageFiles.length > 0 && (
+          <div className="dependencies-section">
+            <strong>Key Dependencies:</strong>
+            <div className="dependency-list">
+              {codebaseInfo.packageFiles[0].dependencies?.slice(0, 8).map((dep: string, index: number) => (
+                <span key={index} className="dependency-item">{dep}</span>
+              ))}
+              {codebaseInfo.packageFiles[0].dependencies?.length > 8 && (
+                <span className="more-deps">+{codebaseInfo.packageFiles[0].dependencies.length - 8} more</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {codebaseInfo.sourceFiles && codebaseInfo.sourceFiles.length > 0 && (
+          <div className="source-structure">
+            <strong>Source Structure:</strong>
+            {codebaseInfo.sourceFiles.map((dir: any, index: number) => (
+              <div key={index} className="source-dir">
+                <div className="dir-name">📁 {dir.directory}/</div>
+                {dir.files && dir.files.slice(0, 3).map((file: string, fileIndex: number) => (
+                  <div key={fileIndex} className="file-item">  📄 {file}</div>
+                ))}
+                {dir.files && dir.files.length > 3 && (
+                  <div className="more-files">  ... and {dir.files.length - 3} more files</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="analysis-note">
+          <em>💡 Consider how your requirements align with the existing codebase structure and technologies.</em>
+        </div>
+      </div>
+    );
   };
 
   // Review checkpoint banner
   const renderReviewBanner = () => {
-    if (!reviewStatus || isEditing) return null;
+    if (!reviewStatus || viewMode === 'edit') return null;
     if (reviewStatus === 'pending') {
       return (
         <div className="review-banner">
@@ -81,7 +154,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       return (
         <div className="review-banner rejected">
           <span>Document rejected. Please edit and regenerate.</span>
-          <button onClick={() => setIsEditing(true)}>Edit</button>
+          <button onClick={() => setViewMode('edit')}>Edit</button>
           {onRegenerate && <button onClick={onRegenerate}>Regenerate</button>}
         </div>
       );
@@ -93,22 +166,38 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     <div className="markdown-editor">
       {renderReviewBanner()}
       <div className="editor-toolbar">
-        {!isEditing ? (
-          <button 
-            className="edit-button"
-            onClick={() => setIsEditing(true)}
+        <div className="view-mode-controls">
+          <button
+            className={`view-mode-button ${viewMode === 'preview' ? 'active' : ''}`}
+            onClick={() => setViewMode('preview')}
+            title="Preview Only"
           >
-            Edit
+            👁️ Preview
           </button>
-        ) : (
+          <button
+            className={`view-mode-button ${viewMode === 'edit' ? 'active' : ''}`}
+            onClick={() => setViewMode('edit')}
+            title="Edit Only"
+          >
+            ✏️ Edit
+          </button>
+          <button
+            className={`view-mode-button ${viewMode === 'split' ? 'active' : ''}`}
+            onClick={() => setViewMode('split')}
+            title="Split View"
+          >
+            📄 Split
+          </button>
+        </div>
+        {viewMode === 'edit' && (
           <div className="edit-controls">
-            <button 
+            <button
               className="save-button"
               onClick={handleSave}
             >
               Save
             </button>
-            <button 
+            <button
               className="cancel-button"
               onClick={handleCancel}
             >
@@ -117,36 +206,38 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           </div>
         )}
       </div>
-      <div className="editor-content">
-        {isEditing ? (
+      <div className={`editor-content ${viewMode === 'split' ? 'split-view' : ''}`}>
+        {viewMode === 'preview' ? (
+          <div className="markdown-preview" ref={previewRef}>
+            {isRequirements && codebaseInfo && <CodebaseInfoComponent />}
+            <MarkdownRenderer content={content} enableMermaid={enableMermaid} />
+          </div>
+        ) : viewMode === 'edit' ? (
           <textarea
+            ref={editorRef}
             className="markdown-textarea"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
+            onScroll={handleEditorScroll}
             placeholder="Enter markdown content..."
           />
         ) : (
-          <div className="markdown-preview">
-            <ReactMarkdown
-              components={{
-                code: ({ node, inline, className, children, ...props }) => {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const language = match && match[1];
-                  
-                  if (!inline && language === 'mermaid' && enableMermaid) {
-                    return <MermaidComponent>{String(children).replace(/\n$/, '')}</MermaidComponent>;
-                  }
-                  
-                  return (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-              }}
-            >
-              {content}
-            </ReactMarkdown>
+          <div className="split-container">
+            <div className="split-editor">
+              <textarea
+                ref={editorRef}
+                className="markdown-textarea"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onScroll={handleEditorScroll}
+                placeholder="Enter markdown content..."
+              />
+            </div>
+            <div className="split-preview">
+              <div className="markdown-preview" ref={previewRef} onScroll={handlePreviewScroll}>
+                <MarkdownRenderer content={editContent} enableMermaid={enableMermaid} />
+              </div>
+            </div>
           </div>
         )}
       </div>

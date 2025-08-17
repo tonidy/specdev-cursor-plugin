@@ -67,6 +67,37 @@ Use the feature dropdown in the SpecDev interface to select and work with differ
 
 Follow the EARS (Easy Approach to Requirements Syntax) format:
 
+#### Enhanced Markdown Support
+
+SpecDev now supports **GitHub Flavored Markdown (GFM)** with full feature support:
+
+- **Tables**: Properly formatted tables with borders and styling
+- **Task Lists**: Interactive checkboxes for requirements tracking  
+- **Strikethrough**: ~~Crossed out text~~ for deprecated items
+- **Code Blocks**: Syntax highlighting for multiple languages
+- **Links**: Automatic link detection and external opening
+- **Blockquotes**: Styled quote blocks for important notes
+
+#### View Modes
+
+Each tab now supports three view modes:
+- **👁️ Preview**: Read-only formatted view with full markdown rendering
+- **✏️ Edit**: Pure text editing with markdown syntax
+- **📄 Split**: Side-by-side editing and preview with synchronized scrolling
+
+#### Markdown Preview with Codebase Analysis
+
+When you save requirements, SpecDev automatically:
+1. **Scans your existing codebase** to detect technologies, dependencies, and project structure
+2. **Shows a preview** of your requirements with contextual information about your project
+3. **Provides insights** on how your requirements align with the existing codebase
+
+The codebase analysis includes:
+- **Technologies detected** (React, TypeScript, Express, etc.)
+- **Key dependencies** from package.json
+- **Source file structure** (src/, components/, etc.)
+- **Configuration files** (tsconfig.json, webpack.config.js, etc.)
+
 ```markdown
 # Requirements Document
 
@@ -114,7 +145,9 @@ sequenceDiagram
 
 ### Tasks Tab
 
-Manage tasks with interactive checkboxes:
+Manage tasks with enhanced markdown support and multiple view modes:
+
+#### Interactive Task Management
 
 ```markdown
 # Task List
@@ -129,7 +162,21 @@ Manage tasks with interactive checkboxes:
 - [x] Task 2: Design database schema
   - [x] Define user table
   - [ ] Define product table
+
+## Progress Table
+
+| Feature | Status | Priority | Assignee |
+|---------|--------|----------|----------|
+| Authentication | 🔄 In Progress | High | @dev1 |
+| Database Schema | ✅ Complete | High | @dev2 |
+| API Integration | 📋 Planned | Medium | @dev3 |
 ```
+
+#### View Modes for Tasks
+
+- **Preview Mode**: See formatted tasks with proper styling and tables
+- **Edit Mode**: Raw markdown editing with full syntax support
+- **Split Mode**: Edit and preview simultaneously with synchronized scrolling
 
 ## Kiro Workflow Integration
 
@@ -207,29 +254,42 @@ No additional configuration is required. SpecDev works out of the box with any V
 
 ### Building
 
+The extension uses a unified build process that compiles both the extension and React webview:
+
 ```bash
+# Build everything (extension + webview)
+npm run build
+
+# Development mode (build and launch VS Code)
+npm run dev
+
+# Package for distribution
+npm run package
+```
+
+### Individual Build Commands
+
+```bash
+# Compile TypeScript extension only
 npm run compile
-```
 
-### Watching for Changes
-
-```bash
+# Watch for changes
 npm run watch
-```
 
-### Running Tests
+# Build webview only
+npm run build-webview
 
-```bash
+# Run tests
 npm test
 ```
 
-### Building Webview (React Components)
+### Build Process
 
-```bash
-cd webview
-npm install
-npm run build
-```
+The build script (`scripts/build.mjs`) performs the following steps:
+1. Builds the TypeScript extension using esbuild
+2. Builds the React webview using Create React App
+3. Copies the webview build files to `dist/webview/`
+4. Creates a unified `dist/` folder ready for packaging
 
 ## Contributing
 
@@ -244,6 +304,21 @@ npm run build
 MIT License - see LICENSE file for details.
 
 ## Changelog
+
+### 0.4.0
+- **Enhanced Markdown Support**: Full GitHub Flavored Markdown (GFM) with tables, task lists, strikethrough
+- **Multiple View Modes**: Preview, Edit, and Split modes for all tabs (Requirements, Design, Tasks)
+- **Improved Table Rendering**: Properly styled tables with borders, headers, and responsive design
+- **Better Mermaid Integration**: Enhanced diagram rendering with error handling
+- **Synchronized Scrolling**: Split mode with real-time scroll synchronization
+- **Task List Enhancements**: Interactive task management with better visual indicators
+
+### 0.3.0
+- **Markdown Preview**: Live preview of requirements with codebase analysis
+- **Codebase Scanning**: Automatic detection of technologies, dependencies, and project structure
+- **React Webview**: Upgraded to React-based UI with better performance and features
+- **Unified Build Process**: Single command builds both extension and webview
+- **Enhanced UX**: Improved interface with better visual feedback
 
 ### 0.2.0
 - **Feature-based organization**: Files now stored under `.specdev/specs/{feature-name}/`

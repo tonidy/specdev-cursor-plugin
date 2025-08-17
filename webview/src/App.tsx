@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import MarkdownEditor from './components/MarkdownEditor';
 import TaskList from './components/TaskList';
+import ErrorBoundary from './components/ErrorBoundary';
 
 type TabType = 'requirements' | 'design' | 'tasks';
 
@@ -22,7 +23,10 @@ const App: React.FC = () => {
   const [currentFeature, setCurrentFeature] = useState<string>('');
   const [showCreateFeature, setShowCreateFeature] = useState(false);
   const [newFeatureName, setNewFeatureName] = useState('');
-  
+  const [codebaseInfo, setCodebaseInfo] = useState<any>(null);
+  const [showPreviewAfterSave, setShowPreviewAfterSave] = useState(false);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+
   // Review status for each doc
   const [reviewStatus, setReviewStatus] = useState<{
     requirements: 'pending' | 'approved' | 'rejected';
@@ -36,6 +40,10 @@ const App: React.FC = () => {
   const [showAgentInfo, setShowAgentInfo] = useState(true);
 
   useEffect(() => {
+    // Acquire VS Code API
+    if (typeof acquireVsCodeApi !== 'undefined') {
+      window.vscode = acquireVsCodeApi();
+    }
     loadFeatures();
   }, []);
 
@@ -50,6 +58,11 @@ const App: React.FC = () => {
         case 'filesLoaded':
           setFileContent(message.content);
           setCurrentFeature(message.currentFeature);
+          setIsLoadingFiles(false);
+          break;
+        case 'codebaseScanned':
+          setCodebaseInfo(message.codebaseInfo);
+          setShowPreviewAfterSave(true);
           break;
       }
     };
@@ -68,12 +81,18 @@ const App: React.FC = () => {
 
   const loadSpecDevFiles = async (feature: string) => {
     try {
-      window.vscode?.postMessage({ 
+      window.vscode?.postMessage({
         command: 'loadFiles',
         feature
       });
+
+      // Set a timeout to clear loading state if no response
+      setTimeout(() => {
+        setIsLoadingFiles(false);
+      }, 5000);
     } catch (error) {
       console.error('Failed to load files:', error);
+      setIsLoadingFiles(false);
     }
   };
 
@@ -84,7 +103,7 @@ const App: React.FC = () => {
     }
 
     setFileContent(prev => ({ ...prev, [type]: content }));
-    
+
     // Save to .specdev/specs/{feature} folder
     try {
       await window.vscode?.postMessage({
@@ -93,6 +112,13 @@ const App: React.FC = () => {
         content,
         feature: currentFeature
       });
+
+      // If saving requirements, scan codebase for preview
+      if (type === 'requirements') {
+        setTimeout(() => {
+          window.vscode?.postMessage({ command: 'scanCodebase' });
+        }, 500);
+      }
     } catch (error) {
       console.error('Failed to save file:', error);
     }
@@ -101,10 +127,12 @@ const App: React.FC = () => {
   const handleFeatureChange = (feature: string) => {
     if (feature) {
       setCurrentFeature(feature);
+      setIsLoadingFiles(true);
       loadSpecDevFiles(feature);
     } else {
       setCurrentFeature('');
       setFileContent({ requirements: '', design: '', tasks: '' });
+      setIsLoadingFiles(false);
     }
   };
 
@@ -246,11 +274,11 @@ sequenceDiagram
       <header className="app-header">
         <h1>SpecDev - Specification Development</h1>
       </header>
-      
+
       <div className="feature-selector">
         <label htmlFor="feature-select">Feature:</label>
-        <select 
-          id="feature-select" 
+        <select
+          id="feature-select"
           value={currentFeature}
           onChange={(e) => handleFeatureChange(e.target.value)}
         >
@@ -290,39 +318,51 @@ sequenceDiagram
           <button onClick={() => setShowCreateFeature(true)}>Create First Feature</button>
         </div>
       ) : currentFeature ? (
-        <>
-          <nav className="tab-navigation">
-            {(['requirements', 'design', 'tasks'] as TabType[]).map((tab) => (
-              <button
-                key={tab}
-                className={`tab-button ${activeTab === tab ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-          </nav>
+        isLoadingFiles ? (
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p>Loading feature files...</p>
+          </div>
+        ) : (
+          <>
+            <nav className="tab-navigation">
+              {(['requirements', 'design', 'tasks'] as TabType[]).map((tab) => (
+                <button
+                  key={tab}
+                  className={`tab-button ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </nav>
 
-          <main className="main-content">
-            {renderStatusBanner()}
-            {activeTab === 'tasks' ? (
-              <TaskList
-                content={currentContent}
-                onChange={(content) => saveFile('tasks', content)}
-                // Add more props for review and workflow as needed
-              />
-            ) : (
-              <MarkdownEditor
-                content={currentContent}
-                onChange={(content) => saveFile(activeTab, content)}
-                enableMermaid={activeTab === 'design'}
-                reviewStatus={reviewStatus[activeTab]}
-                onReview={(status) => handleReview(activeTab, status)}
-                onRegenerate={() => handleRegenerate(activeTab)}
-              />
-            )}
-          </main>
-        </>
+            <main className="main-content">
+              {renderStatusBanner()}
+              <ErrorBoundary>
+                {activeTab === 'tasks' ? (
+                  <TaskList
+                    content={currentContent || ''}
+                    onChange={(content) => saveFile('tasks', content)}
+                    /* Add more props for review and workflow as needed */
+                  />
+                ) : (
+                  <MarkdownEditor
+                    content={currentContent || ''}
+                    onChange={(content) => saveFile(activeTab, content)}
+                    enableMermaid={activeTab === 'design'}
+                    reviewStatus={reviewStatus[activeTab]}
+                    onReview={(status) => handleReview(activeTab, status)}
+                    onRegenerate={() => handleRegenerate(activeTab)}
+                    codebaseInfo={codebaseInfo}
+                    showPreviewAfterSave={showPreviewAfterSave}
+                    isRequirements={activeTab === 'requirements'}
+                  />
+                )}
+              </ErrorBoundary>
+            </main>
+          </>
+        )
       ) : (
         <div className="select-feature">
           <p>Please select a feature from the dropdown above to view and edit its specifications.</p>
@@ -338,6 +378,9 @@ declare global {
       postMessage: (message: any) => void;
     };
   }
+  function acquireVsCodeApi(): {
+    postMessage: (message: any) => void;
+  };
 }
 
 export default App;

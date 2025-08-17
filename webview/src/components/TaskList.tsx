@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface TaskListProps {
   content: string;
@@ -9,12 +9,16 @@ interface TaskListProps {
   onStartNextTask?: (nextIndex: number) => void;
 }
 
+type ViewMode = 'edit' | 'preview' | 'split';
+
 const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, activeTaskIndex, onStartNextTask }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [editContent, setEditContent] = useState(content);
   const [showNextPrompt, setShowNextPrompt] = useState(false);
   const [completedTask, setCompletedTask] = useState<string | null>(null);
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setEditContent(content);
@@ -22,7 +26,7 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
 
   // Debounced auto-save
   useEffect(() => {
-    if (isEditing) {
+    if (viewMode === 'edit' || viewMode === 'split') {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
       saveTimeout.current = setTimeout(() => {
         onChange(editContent);
@@ -31,16 +35,35 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [editContent, isEditing, onChange]);
+  }, [editContent, viewMode, onChange]);
+
+  // Synchronized scrolling
+  const handleEditorScroll = () => {
+    if (viewMode === 'split' && editorRef.current && previewRef.current) {
+      const editor = editorRef.current;
+      const preview = previewRef.current;
+      const scrollPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+      preview.scrollTop = scrollPercentage * (preview.scrollHeight - preview.clientHeight);
+    }
+  };
+
+  const handlePreviewScroll = () => {
+    if (viewMode === 'split' && editorRef.current && previewRef.current) {
+      const editor = editorRef.current;
+      const preview = previewRef.current;
+      const scrollPercentage = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
+      editor.scrollTop = scrollPercentage * (editor.scrollHeight - editor.clientHeight);
+    }
+  };
 
   const handleSave = () => {
     onChange(editContent);
-    setIsEditing(false);
+    setViewMode('preview');
   };
 
   const handleCancel = () => {
     setEditContent(content);
-    setIsEditing(false);
+    setViewMode('preview');
   };
 
   // Parse tasks and enforce only one active
@@ -61,19 +84,7 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
   const tasks = parseTasks();
   const firstIncomplete = tasks.findIndex(t => t.isTask && !t.checked);
 
-  const toggleTask = (lineIndex: number) => {
-    if (lineIndex !== firstIncomplete) return; // Only allow the first incomplete task
-    const lines = content.split('\n');
-    const line = lines[lineIndex];
-    if (line.includes('- [ ]')) {
-      lines[lineIndex] = line.replace('- [ ]', '- [x]');
-      setCompletedTask(tasks[lineIndex].taskName);
-      setShowNextPrompt(true);
-      if (onTaskComplete) onTaskComplete(tasks[lineIndex].taskName);
-    }
-    const newContent = lines.join('\n');
-    onChange(newContent);
-  };
+
 
   const handleStartNext = () => {
     setShowNextPrompt(false);
@@ -83,43 +94,20 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
     }
   };
 
-  const TaskCheckbox = ({ checked, lineIndex }: { checked: boolean; lineIndex: number }) => (
-    <input
-      type="checkbox"
-      checked={checked}
-      disabled={lineIndex !== firstIncomplete}
-      onChange={() => toggleTask(lineIndex)}
-      className={lineIndex === firstIncomplete ? 'task-checkbox active' : 'task-checkbox'}
-    />
-  );
-
-  const renderTaskContent = () => {
-    const lines = content.split('\n');
+  // Custom renderer for interactive tasks
+  const InteractiveTaskRenderer: React.FC<{ content: string }> = ({ content }) => {
     let currentLineIndex = 0;
-    return (
-      <ReactMarkdown
-        components={{
-          li: ({ node, className, children, ...props }) => {
-            const lineContent = lines[currentLineIndex] || '';
-            const isTask = lineContent.includes('- [ ]') || lineContent.includes('- [x]');
-            const isChecked = lineContent.includes('- [x]');
-            const isActive = currentLineIndex === firstIncomplete;
-            currentLineIndex++;
-            if (isTask) {
-              return (
-                <li className={`task-item ${isChecked ? 'completed' : ''} ${isActive ? 'active-task' : ''}`} {...props}>
-                  <TaskCheckbox checked={isChecked} lineIndex={currentLineIndex - 1} />
-                  <span className="task-content">{children}</span>
-                </li>
-              );
-            }
-            return <li className={className} {...props}>{children}</li>;
-          }
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    );
+    
+    // Create a modified content where we can handle checkboxes
+    const modifiedContent = content.replace(/- \[([ x])\] (.+)/g, (match, checked, text) => {
+      const lineIndex = currentLineIndex++;
+      const isChecked = checked === 'x';
+      const isActive = lineIndex === firstIncomplete;
+      
+      return `- ${isChecked ? '☑' : (isActive ? '🔲' : '☐')} ${text}`;
+    });
+
+    return <MarkdownRenderer content={modifiedContent} />;
   };
 
   return (
@@ -132,22 +120,38 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
         </div>
       )}
       <div className="editor-toolbar">
-        {!isEditing ? (
-          <button 
-            className="edit-button"
-            onClick={() => setIsEditing(true)}
+        <div className="view-mode-controls">
+          <button
+            className={`view-mode-button ${viewMode === 'preview' ? 'active' : ''}`}
+            onClick={() => setViewMode('preview')}
+            title="Preview Only"
           >
-            Edit
+            👁️ Preview
           </button>
-        ) : (
+          <button
+            className={`view-mode-button ${viewMode === 'edit' ? 'active' : ''}`}
+            onClick={() => setViewMode('edit')}
+            title="Edit Only"
+          >
+            ✏️ Edit
+          </button>
+          <button
+            className={`view-mode-button ${viewMode === 'split' ? 'active' : ''}`}
+            onClick={() => setViewMode('split')}
+            title="Split View"
+          >
+            📄 Split
+          </button>
+        </div>
+        {viewMode === 'edit' && (
           <div className="edit-controls">
-            <button 
+            <button
               className="save-button"
               onClick={handleSave}
             >
               Save
             </button>
-            <button 
+            <button
               className="cancel-button"
               onClick={handleCancel}
             >
@@ -156,17 +160,37 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
           </div>
         )}
       </div>
-      <div className="task-content">
-        {isEditing ? (
+      <div className={`editor-content ${viewMode === 'split' ? 'split-view' : ''}`}>
+        {viewMode === 'preview' ? (
+          <div className="markdown-preview" ref={previewRef}>
+            <InteractiveTaskRenderer content={content} />
+          </div>
+        ) : viewMode === 'edit' ? (
           <textarea
-            className="task-textarea"
+            ref={editorRef}
+            className="markdown-textarea"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
+            onScroll={handleEditorScroll}
             placeholder="Enter task list in markdown format..."
           />
         ) : (
-          <div className="task-preview">
-            {renderTaskContent()}
+          <div className="split-container">
+            <div className="split-editor">
+              <textarea
+                ref={editorRef}
+                className="markdown-textarea"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onScroll={handleEditorScroll}
+                placeholder="Enter task list in markdown format..."
+              />
+            </div>
+            <div className="split-preview">
+              <div className="markdown-preview" ref={previewRef} onScroll={handlePreviewScroll}>
+                <InteractiveTaskRenderer content={editContent} />
+              </div>
+            </div>
           </div>
         )}
       </div>

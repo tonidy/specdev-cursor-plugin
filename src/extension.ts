@@ -27,7 +27,10 @@ class SpecDevProvider {
       column || vscode.ViewColumn.One,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, 'dist', 'webview'),
+          vscode.Uri.joinPath(extensionUri, 'media')
+        ],
       }
     );
 
@@ -79,6 +82,13 @@ class SpecDevProvider {
             vscode.window.showInformationMessage(`Regenerating ${message.type}... (stub)`);
             // TODO: Integrate with Cursor GPT for actual regeneration
             break;
+          case 'scanCodebase':
+            const codebaseInfo = await this.scanCodebase();
+            panel.webview.postMessage({
+              command: 'codebaseScanned',
+              codebaseInfo: codebaseInfo
+            });
+            break;
         }
       },
       undefined,
@@ -92,7 +102,7 @@ class SpecDevProvider {
     }
 
     const specsPath = path.join(workspaceFolder.uri.fsPath, '.specdev', 'specs');
-    
+
     // Ensure .specdev/specs directory exists
     if (!fs.existsSync(specsPath)) {
       fs.mkdirSync(specsPath, { recursive: true });
@@ -117,7 +127,7 @@ class SpecDevProvider {
     }
 
     const featurePath = path.join(workspaceFolder.uri.fsPath, '.specdev', 'specs', featureName);
-    
+
     // Ensure feature directory exists
     if (!fs.existsSync(featurePath)) {
       fs.mkdirSync(featurePath, { recursive: true });
@@ -221,14 +231,14 @@ sequenceDiagram
 `;
   }
 
-  private async loadSpecDevFiles(feature: string): Promise<{requirements: string, design: string, tasks: string}> {
+  private async loadSpecDevFiles(feature: string): Promise<{ requirements: string, design: string, tasks: string }> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       return { requirements: '', design: '', tasks: '' };
     }
 
     const featurePath = path.join(workspaceFolder.uri.fsPath, '.specdev', 'specs', feature);
-    
+
     // Ensure feature directory exists
     if (!fs.existsSync(featurePath)) {
       fs.mkdirSync(featurePath, { recursive: true });
@@ -240,7 +250,7 @@ sequenceDiagram
     for (const file of files) {
       const filePath = path.join(featurePath, file);
       const key = file.replace('.md', '');
-      
+
       try {
         if (fs.existsSync(filePath)) {
           content[key] = fs.readFileSync(filePath, 'utf8');
@@ -279,14 +289,14 @@ sequenceDiagram
     }
 
     const featurePath = path.join(workspaceFolder.uri.fsPath, '.specdev', 'specs', feature);
-    
+
     // Ensure feature directory exists
     if (!fs.existsSync(featurePath)) {
       fs.mkdirSync(featurePath, { recursive: true });
     }
 
     const filePath = path.join(featurePath, `${type}.md`);
-    
+
     try {
       fs.writeFileSync(filePath, content, 'utf8');
       vscode.window.showInformationMessage(`${type}.md saved successfully for feature "${feature}"`);
@@ -295,7 +305,164 @@ sequenceDiagram
     }
   }
 
+  private async scanCodebase(): Promise<any> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      return { error: 'No workspace folder found' };
+    }
+
+    const rootPath = workspaceFolder.uri.fsPath;
+    const codebaseInfo: {
+      projectStructure: any[];
+      technologies: string[];
+      packageFiles: any[];
+      configFiles: string[];
+      sourceFiles: { directory: string; files: string[] }[];
+    } = {
+      projectStructure: [],
+      technologies: [],
+      packageFiles: [],
+      configFiles: [],
+      sourceFiles: []
+    };
+
+    try {
+      // Scan for package files and technologies
+      const packageJsonPath = path.join(rootPath, 'package.json');
+      if (fs.existsSync(packageJsonPath)) {
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        codebaseInfo.packageFiles.push({
+          file: 'package.json',
+          dependencies: Object.keys(packageJson.dependencies || {}),
+          devDependencies: Object.keys(packageJson.devDependencies || {}),
+          scripts: Object.keys(packageJson.scripts || {})
+        });
+
+        // Detect technologies from dependencies
+        const allDeps = [...Object.keys(packageJson.dependencies || {}), ...Object.keys(packageJson.devDependencies || {})];
+        if (allDeps.some(dep => dep.includes('react'))) codebaseInfo.technologies.push('React');
+        if (allDeps.some(dep => dep.includes('vue'))) codebaseInfo.technologies.push('Vue');
+        if (allDeps.some(dep => dep.includes('angular'))) codebaseInfo.technologies.push('Angular');
+        if (allDeps.some(dep => dep.includes('typescript'))) codebaseInfo.technologies.push('TypeScript');
+        if (allDeps.some(dep => dep.includes('express'))) codebaseInfo.technologies.push('Express');
+        if (allDeps.some(dep => dep.includes('next'))) codebaseInfo.technologies.push('Next.js');
+      }
+
+      // Check for other common files
+      const commonFiles = ['tsconfig.json', 'webpack.config.js', 'vite.config.js', '.eslintrc.json', 'tailwind.config.js'];
+      for (const file of commonFiles) {
+        if (fs.existsSync(path.join(rootPath, file))) {
+          codebaseInfo.configFiles.push(file);
+        }
+      }
+
+      // Scan directory structure (limited depth)
+      codebaseInfo.projectStructure = this.scanDirectory(rootPath, 2);
+
+      // Find main source directories
+      const sourceDirs = ['src', 'lib', 'app', 'pages', 'components'];
+      for (const dir of sourceDirs) {
+        const dirPath = path.join(rootPath, dir);
+        if (fs.existsSync(dirPath)) {
+          const files = this.getFilesInDirectory(dirPath, ['.ts', '.tsx', '.js', '.jsx', '.vue', '.py', '.java', '.cs']);
+          codebaseInfo.sourceFiles.push({
+            directory: dir,
+            files: files.slice(0, 10) // Limit to first 10 files
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error('Error scanning codebase:', error);
+      return { error: 'Failed to scan codebase' };
+    }
+
+    return codebaseInfo;
+  }
+
+  private scanDirectory(dirPath: string, maxDepth: number, currentDepth: number = 0): any[] {
+    if (currentDepth >= maxDepth) return [];
+
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+      const result = [];
+
+      for (const item of items) {
+        if (item.name.startsWith('.') && !['src', 'dist', 'build'].includes(item.name)) continue;
+        if (item.name === 'node_modules') continue;
+
+        if (item.isDirectory()) {
+          const subItems = this.scanDirectory(path.join(dirPath, item.name), maxDepth, currentDepth + 1);
+          result.push({
+            name: item.name,
+            type: 'directory',
+            children: subItems
+          });
+        } else {
+          result.push({
+            name: item.name,
+            type: 'file'
+          });
+        }
+      }
+
+      return result.slice(0, 20); // Limit items per directory
+    } catch (error) {
+      return [];
+    }
+  }
+
+  private getFilesInDirectory(dirPath: string, extensions: string[]): string[] {
+    try {
+      const files = [];
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const item of items) {
+        if (item.isFile() && extensions.some(ext => item.name.endsWith(ext))) {
+          files.push(item.name);
+        } else if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
+          const subFiles = this.getFilesInDirectory(path.join(dirPath, item.name), extensions);
+          files.push(...subFiles.map(f => `${item.name}/${f}`));
+        }
+      }
+
+      return files;
+    } catch (error) {
+      return [];
+    }
+  }
+
   private getHtmlForWebview(webview: vscode.Webview): string {
+    // Try to serve the built React app
+    const webviewPath = vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview');
+    const indexPath = vscode.Uri.joinPath(webviewPath, 'index.html');
+    
+    try {
+      if (fs.existsSync(indexPath.fsPath)) {
+        let html = fs.readFileSync(indexPath.fsPath, 'utf8');
+        
+        // Replace relative paths with webview URIs
+        const staticPath = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'static'));
+        html = html.replace(/\/static\//g, `${staticPath.toString()}/`);
+        
+        // Add CSP and other necessary modifications
+        html = html.replace(
+          '<head>',
+          `<head>
+          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">`
+        );
+        
+        return html;
+      }
+    } catch (error) {
+      console.error('Failed to load React webview:', error);
+    }
+    
+    // Fallback to inline HTML if React build is not available
+    return this.getFallbackHtml();
+  }
+
+  private getFallbackHtml(): string {
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -393,6 +560,71 @@ sequenceDiagram
                 padding: 40px;
                 color: var(--vscode-descriptionForeground);
             }
+            .editor-container, .preview-container {
+                height: 500px;
+                overflow-y: auto;
+            }
+            .preview-container {
+                border: 1px solid var(--vscode-panel-border);
+                padding: 15px;
+                background: var(--vscode-editor-background);
+            }
+            .preview-header {
+                margin-bottom: 20px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 10px;
+            }
+            .preview-header h3 {
+                margin: 0 0 10px 0;
+                color: var(--vscode-editor-foreground);
+            }
+            .codebase-info {
+                background: var(--vscode-textBlockQuote-background);
+                padding: 10px;
+                border-left: 3px solid var(--vscode-textLink-foreground);
+                margin: 10px 0;
+            }
+            .codebase-info h4 {
+                margin: 0 0 10px 0;
+                color: var(--vscode-textLink-foreground);
+            }
+            .tech-badge {
+                display: inline-block;
+                background: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 12px;
+                margin: 2px;
+            }
+            .file-list {
+                font-family: monospace;
+                font-size: 12px;
+                color: var(--vscode-descriptionForeground);
+            }
+            .preview-content {
+                line-height: 1.6;
+            }
+            .preview-content h1, .preview-content h2, .preview-content h3 {
+                color: var(--vscode-editor-foreground);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 5px;
+            }
+            .preview-content ul, .preview-content ol {
+                padding-left: 20px;
+            }
+            .preview-content code {
+                background: var(--vscode-textCodeBlock-background);
+                padding: 2px 4px;
+                border-radius: 3px;
+                font-family: monospace;
+            }
+            .preview-content pre {
+                background: var(--vscode-textCodeBlock-background);
+                padding: 10px;
+                border-radius: 5px;
+                overflow-x: auto;
+            }
         </style>
     </head>
     <body>
@@ -423,8 +655,21 @@ sequenceDiagram
                 <div id="requirements" class="content active">
                     <div class="toolbar">
                         <button onclick="saveFile('requirements')">Save Requirements</button>
+                        <button onclick="togglePreview('requirements')" id="preview-btn-requirements">Preview</button>
                     </div>
-                    <textarea id="requirements-content" placeholder="Enter requirements in markdown format..."></textarea>
+                    <div id="requirements-editor" class="editor-container">
+                        <textarea id="requirements-content" placeholder="Enter requirements in markdown format..."></textarea>
+                    </div>
+                    <div id="requirements-preview" class="preview-container" style="display: none;">
+                        <div class="preview-header">
+                            <h3>Requirements Preview</h3>
+                            <div class="codebase-info" id="codebase-info" style="display: none;">
+                                <h4>Existing Codebase Analysis</h4>
+                                <div id="codebase-details"></div>
+                            </div>
+                        </div>
+                        <div class="preview-content" id="requirements-preview-content"></div>
+                    </div>
                 </div>
 
                 <div id="design" class="content">
@@ -464,6 +709,9 @@ sequenceDiagram
                         currentContent = message.content;
                         currentFeature = message.currentFeature;
                         updateTextareas();
+                        break;
+                    case 'codebaseScanned':
+                        displayCodebaseInfo(message.codebaseInfo);
                         break;
                 }
             });
@@ -542,6 +790,104 @@ sequenceDiagram
                     content: content,
                     feature: currentFeature
                 });
+
+                // If saving requirements, automatically scan codebase and show preview
+                if (type === 'requirements') {
+                    setTimeout(() => {
+                        vscode.postMessage({ command: 'scanCodebase' });
+                        showPreview(type, content);
+                    }, 500);
+                }
+            }
+
+            function togglePreview(type) {
+                const editor = document.getElementById(type + '-editor');
+                const preview = document.getElementById(type + '-preview');
+                const btn = document.getElementById('preview-btn-' + type);
+                
+                if (preview.style.display === 'none') {
+                    const content = document.getElementById(type + '-content').value;
+                    showPreview(type, content);
+                    editor.style.display = 'none';
+                    preview.style.display = 'block';
+                    btn.textContent = 'Edit';
+                    
+                    // Scan codebase when showing preview
+                    vscode.postMessage({ command: 'scanCodebase' });
+                } else {
+                    editor.style.display = 'block';
+                    preview.style.display = 'none';
+                    btn.textContent = 'Preview';
+                }
+            }
+
+            function showPreview(type, content) {
+                const previewContent = document.getElementById(type + '-preview-content');
+                previewContent.innerHTML = markdownToHtml(content);
+            }
+
+            function displayCodebaseInfo(codebaseInfo) {
+                const codebaseDiv = document.getElementById('codebase-info');
+                const detailsDiv = document.getElementById('codebase-details');
+                
+                if (codebaseInfo.error) {
+                    codebaseDiv.style.display = 'none';
+                    return;
+                }
+
+                let html = '';
+                
+                if (codebaseInfo.technologies && codebaseInfo.technologies.length > 0) {
+                    html += '<p><strong>Technologies:</strong><br>';
+                    codebaseInfo.technologies.forEach(tech => {
+                        html += \`<span class="tech-badge">\${tech}</span>\`;
+                    });
+                    html += '</p>';
+                }
+
+                if (codebaseInfo.packageFiles && codebaseInfo.packageFiles.length > 0) {
+                    const pkg = codebaseInfo.packageFiles[0];
+                    if (pkg.dependencies && pkg.dependencies.length > 0) {
+                        html += \`<p><strong>Key Dependencies:</strong> \${pkg.dependencies.slice(0, 5).join(', ')}\`;
+                        if (pkg.dependencies.length > 5) html += \` and \${pkg.dependencies.length - 5} more\`;
+                        html += '</p>';
+                    }
+                }
+
+                if (codebaseInfo.sourceFiles && codebaseInfo.sourceFiles.length > 0) {
+                    html += '<p><strong>Source Structure:</strong></p>';
+                    codebaseInfo.sourceFiles.forEach(dir => {
+                        if (dir.files && dir.files.length > 0) {
+                            html += \`<div class="file-list"><strong>\${dir.directory}/</strong><br>\`;
+                            html += dir.files.slice(0, 3).map(f => \`  \${f}\`).join('<br>');
+                            if (dir.files.length > 3) html += \`<br>  ... and \${dir.files.length - 3} more files\`;
+                            html += '</div>';
+                        }
+                    });
+                }
+
+                if (html) {
+                    detailsDiv.innerHTML = html;
+                    codebaseDiv.style.display = 'block';
+                } else {
+                    codebaseDiv.style.display = 'none';
+                }
+            }
+
+            // Simple markdown to HTML converter
+            function markdownToHtml(markdown) {
+                return markdown
+                    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                    .replace(/^\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                    .replace(/^\*(.*)\*/gim, '<em>$1</em>')
+                    .replace(/^\`(.*)\`/gim, '<code>$1</code>')
+                    .replace(/^- (.*$)/gim, '<li>$1</li>')
+                    .replace(/^\\d+\\. (.*$)/gim, '<li>$1</li>')
+                    .replace(/\\n\\n/g, '</p><p>')
+                    .replace(/\\n/g, '<br>')
+                    .replace(/^(.*)$/, '<p>$1</p>');
             }
 
             function updateTextareas() {
@@ -577,13 +923,13 @@ export function activate(context: vscode.ExtensionContext) {
   const initCmd = vscode.commands.registerCommand('specdev.init', async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) return;
-    
+
     // Create .specdev/specs directory structure
     const specdevPath = path.join(workspaceFolder.uri.fsPath, '.specdev');
     const specsPath = path.join(specdevPath, 'specs');
     if (!fs.existsSync(specdevPath)) fs.mkdirSync(specdevPath, { recursive: true });
     if (!fs.existsSync(specsPath)) fs.mkdirSync(specsPath, { recursive: true });
-    
+
     // Generate .cursor/rules files
     const cursorRulesPath = path.join(workspaceFolder.uri.fsPath, '.cursor', 'rules');
     if (!fs.existsSync(cursorRulesPath)) fs.mkdirSync(cursorRulesPath, { recursive: true });
@@ -618,4 +964,4 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(provider, initCmd, genReqCmd, genDesignCmd, genTasksCmd);
 }
 
-export function deactivate() {}
+export function deactivate() { }
