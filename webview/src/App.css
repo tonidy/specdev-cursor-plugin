@@ -749,6 +749,50 @@
   font-family: monospace;
 }
 
+.mermaid-fallback {
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.mermaid-fallback h4 {
+  margin-top: 0;
+  color: var(--vscode-editor-foreground);
+}
+
+.mermaid-fallback details {
+  margin: 12px 0;
+  text-align: left;
+}
+
+.mermaid-fallback summary {
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: var(--vscode-textLink-foreground);
+}
+
+.mermaid-fallback pre {
+  background-color: var(--vscode-textCodeBlock-background);
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  text-align: left;
+}
+
+.mermaid-fallback a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+}
+
+.mermaid-fallback a:hover {
+  text-decoration: underline;
+}
+
 .table-error {
   color: var(--vscode-errorForeground);
   background-color: var(--vscode-inputValidation-errorBackground);

@@ -2,7 +2,7 @@
   "name": "specdev",
   "displayName": "SpecDev - Specification Development Tool",
   "description": "A Kiro-style workflow plugin for managing requirements, design, and tasks with markdown and Mermaid support",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "author": {
     "name": "dosht"
   },

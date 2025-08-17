@@ -17,8 +17,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
   useEffect(() => {
     if (enableMermaid && containerRef.current) {
-      // Initialize mermaid
-      mermaid.initialize({ 
+      // Initialize mermaid with webview-safe configuration
+      mermaid.initialize({
         startOnLoad: false,
         theme: 'dark',
         themeVariables: {
@@ -31,7 +31,21 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           gridColor: '#444',
           secondaryColor: '#006100',
           tertiaryColor: '#fff'
-        }
+        },
+        // Disable dynamic imports that cause chunk loading issues in webviews
+        securityLevel: 'loose',
+        deterministicIds: true,
+        // Disable external diagram types that require dynamic loading
+        flowchart: { useMaxWidth: true },
+        sequence: { useMaxWidth: true },
+        gantt: { useMaxWidth: true },
+        journey: { useMaxWidth: true },
+        class: { useMaxWidth: true },
+        state: { useMaxWidth: true },
+        er: { useMaxWidth: true },
+        pie: { useMaxWidth: true },
+        // Configure for webview environment
+        logLevel: 'error'
       });
 
       // Find and render mermaid diagrams
@@ -58,33 +72,73 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
   const MermaidComponent = ({ children }: { children: string }) => {
     const mermaidRef = useRef<HTMLDivElement>(null);
-    
+    const [isRendering, setIsRendering] = useState(false);
+
     useEffect(() => {
-      if (mermaidRef.current && enableMermaid) {
+      if (mermaidRef.current && enableMermaid && !isRendering) {
+        setIsRendering(true);
+
         // Create a valid CSS selector ID (no dots, only alphanumeric and hyphens)
         const timestamp = Date.now();
         const randomNum = Math.floor(Math.random() * 10000);
         const graphId = `mermaid-${timestamp}-${randomNum}`;
 
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          if (mermaidRef.current) {
+            mermaidRef.current.innerHTML = `<div class="mermaid-error">Mermaid rendering timeout</div>`;
+          }
+          setIsRendering(false);
+        }, 5000);
+
         try {
-          mermaid.render(graphId, children).then(({ svg }) => {
-            if (mermaidRef.current) {
-              mermaidRef.current.innerHTML = svg;
+          // Use async/await with proper error handling
+          const renderMermaid = async () => {
+            try {
+              const { svg } = await mermaid.render(graphId, children);
+              clearTimeout(timeoutId);
+              if (mermaidRef.current) {
+                mermaidRef.current.innerHTML = svg;
+              }
+            } catch (error) {
+              clearTimeout(timeoutId);
+              console.error('Mermaid rendering error:', error);
+              if (mermaidRef.current) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                // Check if it's a chunk loading error
+                if (errorMessage.includes('Loading chunk') || errorMessage.includes('chunk') || errorMessage.includes('Failed to fetch')) {
+                  mermaidRef.current.innerHTML = `
+                    <div class="mermaid-fallback">
+                      <h4>📊 Mermaid Diagram</h4>
+                      <p><em>Diagram rendering is not available in this environment.</em></p>
+                      <details>
+                        <summary>View Diagram Code</summary>
+                        <pre><code>${children}</code></pre>
+                      </details>
+                      <p><small>💡 Tip: Copy the code above and paste it into <a href="https://mermaid.live" target="_blank">mermaid.live</a> to view the diagram.</small></p>
+                    </div>
+                  `;
+                } else {
+                  mermaidRef.current.innerHTML = `<div class="mermaid-error">Error rendering diagram: ${errorMessage}</div>`;
+                }
+              }
+            } finally {
+              setIsRendering(false);
             }
-          }).catch((error) => {
-            console.error('Mermaid rendering error:', error);
-            if (mermaidRef.current) {
-              mermaidRef.current.innerHTML = `<div class="mermaid-error">Error rendering diagram: ${error.message}</div>`;
-            }
-          });
+          };
+
+          renderMermaid();
         } catch (error) {
+          clearTimeout(timeoutId);
           console.error('Mermaid rendering error:', error);
           if (mermaidRef.current) {
             mermaidRef.current.innerHTML = `<div class="mermaid-error">Error rendering diagram</div>`;
           }
+          setIsRendering(false);
         }
       }
-    }, [children]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [children, enableMermaid, isRendering]);
 
     return <div ref={mermaidRef} className="mermaid-container" />;
   };
