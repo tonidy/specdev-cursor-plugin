@@ -474,7 +474,7 @@ sequenceDiagram
             `img-src ${webview.cspSource} https: data:`,
             `font-src ${webview.cspSource}`,
             `style-src ${webview.cspSource} 'unsafe-inline'`,
-            `script-src 'nonce-${nonce}'`
+            `script-src ${webview.cspSource} 'nonce-${nonce}'`
           ].join('; ');
 
           // Return HTML with Vite assets

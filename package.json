@@ -2,7 +2,7 @@
   "name": "specdev",
   "displayName": "SpecDev - Specification Development Tool",
   "description": "A Kiro-style workflow plugin for managing requirements, design, and tasks with markdown and Mermaid support",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "author": {
     "name": "dosht"
   },
@@ -81,7 +81,7 @@
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "dev": "npm run build && code --extensionDevelopmentPath=. .",
-    "package": "npm run build && vsce package",
+    "package": "vsce package",
     "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
