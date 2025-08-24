@@ -9,9 +9,22 @@
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ],
             "outFiles": [
+                "${workspaceFolder}/dist/**/*.js",
                 "${workspaceFolder}/out/**/*.js"
             ],
-            "preLaunchTask": "${workspaceFolder}:npm: watch"
+            "preLaunchTask": "npm: watch"
+        },
+        {
+            "name": "Run Extension (Build)",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "preLaunchTask": "npm: build"
         },
         {
             "name": "Extension Tests",
@@ -24,7 +37,7 @@
             "outFiles": [
                 "${workspaceFolder}/out/test/**/*.js"
             ],
-            "preLaunchTask": "${workspaceFolder}:npm: watch"
+            "preLaunchTask": "npm: pretest"
         }
     ]
 }

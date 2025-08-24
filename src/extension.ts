@@ -447,9 +447,14 @@ sequenceDiagram
     const indexPath = vscode.Uri.joinPath(webviewRoot, 'index.html');
     const nonce = this.getNonce();
 
+    console.log('Loading webview from:', webviewRoot.fsPath);
+    console.log('Manifest path:', manifestPath.fsPath);
+    console.log('Index path:', indexPath.fsPath);
+
     try {
       // Check if we have a manifest.json from Vite
       if (fs.existsSync(manifestPath.fsPath)) {
+        console.log('Found manifest.json, loading from Vite build...');
         const manifest = JSON.parse(fs.readFileSync(manifestPath.fsPath, 'utf8'));
         const entry = manifest['index.html'];
         

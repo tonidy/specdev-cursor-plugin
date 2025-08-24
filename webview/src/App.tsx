@@ -40,10 +40,7 @@ const App: React.FC = () => {
   const [showAgentInfo, setShowAgentInfo] = useState(true);
 
   useEffect(() => {
-    // Acquire VS Code API
-    if (typeof acquireVsCodeApi !== 'undefined') {
-      window.vscode = acquireVsCodeApi();
-    }
+    // VS Code API is already initialized in main.tsx
     loadFeatures();
   }, []);
 
