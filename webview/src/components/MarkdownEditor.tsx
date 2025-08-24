@@ -11,6 +11,7 @@ interface MarkdownEditorProps {
   codebaseInfo?: any;
   showPreviewAfterSave?: boolean;
   isRequirements?: boolean;
+  onViewModeChange?: (viewMode: 'edit' | 'preview' | 'split') => void;
 }
 
 type ViewMode = 'edit' | 'preview' | 'split';
@@ -24,17 +25,25 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   onRegenerate,
   codebaseInfo,
   showPreviewAfterSave = false,
-  isRequirements = false
+  isRequirements = false,
+  onViewModeChange
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [editContent, setEditContent] = useState(content);
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeout = useRef<number | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setEditContent(content);
   }, [content]);
+
+  // Notify parent component when view mode changes
+  useEffect(() => {
+    if (onViewModeChange) {
+      onViewModeChange(viewMode);
+    }
+  }, [viewMode, onViewModeChange]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -140,7 +149,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   // Review checkpoint banner
   const renderReviewBanner = () => {
-    if (!reviewStatus || viewMode === 'edit') return null;
+    // Only show review banners in edit mode, and only if not approved
+    if (!reviewStatus || viewMode !== 'edit' || reviewStatus === 'approved') return null;
     if (reviewStatus === 'pending') {
       return (
         <div className="review-banner">
@@ -154,7 +164,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       return (
         <div className="review-banner rejected">
           <span>Document rejected. Please edit and regenerate.</span>
-          <button onClick={() => setViewMode('edit')}>Edit</button>
           {onRegenerate && <button onClick={onRegenerate}>Regenerate</button>}
         </div>
       );

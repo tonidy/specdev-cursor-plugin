@@ -7,11 +7,25 @@ interface TaskListProps {
   onTaskComplete?: (taskName: string) => void;
   activeTaskIndex?: number;
   onStartNextTask?: (nextIndex: number) => void;
+  reviewStatus?: 'pending' | 'approved' | 'rejected';
+  onReview?: (status: 'approved' | 'rejected') => void;
+  onRegenerate?: () => void;
+  onViewModeChange?: (viewMode: 'edit' | 'preview' | 'split') => void;
 }
 
 type ViewMode = 'edit' | 'preview' | 'split';
 
-const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, activeTaskIndex, onStartNextTask }) => {
+const TaskList: React.FC<TaskListProps> = ({
+  content,
+  onChange,
+  onTaskComplete,
+  activeTaskIndex,
+  onStartNextTask,
+  reviewStatus = undefined,
+  onReview,
+  onRegenerate,
+  onViewModeChange
+}) => {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [editContent, setEditContent] = useState(content);
   const [showNextPrompt, setShowNextPrompt] = useState(false);
@@ -23,6 +37,13 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
   useEffect(() => {
     setEditContent(content);
   }, [content]);
+
+  // Notify parent component when view mode changes
+  useEffect(() => {
+    if (onViewModeChange) {
+      onViewModeChange(viewMode);
+    }
+  }, [viewMode, onViewModeChange]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -110,8 +131,33 @@ const TaskList: React.FC<TaskListProps> = ({ content, onChange, onTaskComplete, 
     return <MarkdownRenderer content={modifiedContent} />;
   };
 
+  // Review checkpoint banner
+  const renderReviewBanner = () => {
+    // Only show review banners in edit mode, and only if not approved
+    if (!reviewStatus || viewMode !== 'edit' || reviewStatus === 'approved') return null;
+    if (reviewStatus === 'pending') {
+      return (
+        <div className="review-banner">
+          <span>Review this task list. Is it complete, clear, and correct?</span>
+          <button onClick={() => onReview && onReview('approved')}>Y</button>
+          <button onClick={() => onReview && onReview('rejected')}>N</button>
+        </div>
+      );
+    }
+    if (reviewStatus === 'rejected') {
+      return (
+        <div className="review-banner rejected">
+          <span>Task list rejected. Please edit and regenerate.</span>
+          {onRegenerate && <button onClick={onRegenerate}>Regenerate</button>}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="task-list">
+      {renderReviewBanner()}
       {showNextPrompt && completedTask && (
         <div className="task-next-banner">
           <span>Task "{completedTask}" is complete. Should I start the next task?</span>

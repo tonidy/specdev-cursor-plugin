@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [codebaseInfo, setCodebaseInfo] = useState<any>(null);
   const [showPreviewAfterSave, setShowPreviewAfterSave] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [currentViewMode, setCurrentViewMode] = useState<'edit' | 'preview' | 'split'>('preview');
 
   // Review status for each doc
   const [reviewStatus, setReviewStatus] = useState<{
@@ -37,7 +38,11 @@ const App: React.FC = () => {
     design: 'pending',
     tasks: 'pending',
   });
-  const [showAgentInfo, setShowAgentInfo] = useState(true);
+  const [showAgentInfo, setShowAgentInfo] = useState(() => {
+    // Check localStorage to see if user has dismissed the banner before
+    const dismissed = localStorage.getItem('specdev-agent-info-dismissed');
+    return dismissed !== 'true';
+  });
 
   useEffect(() => {
     // VS Code API is already initialized in main.tsx
@@ -126,10 +131,19 @@ const App: React.FC = () => {
       setCurrentFeature(feature);
       setIsLoadingFiles(true);
       loadSpecDevFiles(feature);
+      // Load persisted review status for this feature
+      const persistedReviewStatus = loadReviewStatus(feature);
+      setReviewStatus(persistedReviewStatus);
     } else {
       setCurrentFeature('');
       setFileContent({ requirements: '', design: '', tasks: '' });
       setIsLoadingFiles(false);
+      // Reset review status to pending when no feature is selected
+      setReviewStatus({
+        requirements: 'pending',
+        design: 'pending',
+        tasks: 'pending',
+      });
     }
   };
 
@@ -237,19 +251,48 @@ sequenceDiagram
   // Review checkpoint handlers
   const handleReview = (type: TabType, status: 'approved' | 'rejected') => {
     setReviewStatus(prev => ({ ...prev, [type]: status }));
+    // Save review status to localStorage
+    if (currentFeature) {
+      saveReviewStatus(currentFeature, type, status);
+    }
   };
   const handleRegenerate = (type: TabType) => {
     // Send message to backend to regenerate (to be implemented)
     window.vscode?.postMessage({ command: 'regenerate', type });
     setReviewStatus(prev => ({ ...prev, [type]: 'pending' }));
+    // Save the reset status to localStorage
+    if (currentFeature) {
+      saveReviewStatus(currentFeature, type, 'pending');
+    }
+  };
+
+  // Handle dismissing the agent info banner
+  const handleDismissAgentInfo = () => {
+    setShowAgentInfo(false);
+    localStorage.setItem('specdev-agent-info-dismissed', 'true');
+  };
+
+  // Save review status to localStorage
+  const saveReviewStatus = (feature: string, type: TabType, status: 'pending' | 'approved' | 'rejected') => {
+    const key = `specdev-review-${feature}-${type}`;
+    localStorage.setItem(key, status);
+  };
+
+  // Load review status from localStorage
+  const loadReviewStatus = (feature: string): { requirements: 'pending' | 'approved' | 'rejected'; design: 'pending' | 'approved' | 'rejected'; tasks: 'pending' | 'approved' | 'rejected' } => {
+    const requirements = localStorage.getItem(`specdev-review-${feature}-requirements`) as 'pending' | 'approved' | 'rejected' || 'pending';
+    const design = localStorage.getItem(`specdev-review-${feature}-design`) as 'pending' | 'approved' | 'rejected' || 'pending';
+    const tasks = localStorage.getItem(`specdev-review-${feature}-tasks`) as 'pending' | 'approved' | 'rejected' || 'pending';
+    return { requirements, design, tasks };
   };
 
   // Visual indicator for incomplete/pending review
   const renderStatusBanner = () => {
+    // Only show status banner in edit mode, and only if not approved
+    if (currentViewMode !== 'edit') return null;
+
     const status = reviewStatus[activeTab];
-    if (status === 'pending') {
-      return <div className="status-banner">Pending review: Please review and approve this document.</div>;
-    }
+    // Removed pending status banner - only show rejected status
     if (status === 'rejected') {
       return <div className="status-banner rejected">Document rejected. Please edit and regenerate.</div>;
     }
@@ -265,7 +308,7 @@ sequenceDiagram
           <span>
             <b>Note:</b> Document generation (requirements, design, tasks) is performed by the <b>Cursor agent/chat</b>, not directly by this extension. Use the agent to generate and review documents. <a href="https://github.com/tonidy/specdev-cursor-plugin#kiro-workflow--agent-integration" target="_blank" rel="noopener noreferrer">Learn more</a>.
           </span>
-          <button className="close-banner" onClick={() => setShowAgentInfo(false)}>×</button>
+          <button className="close-banner" onClick={handleDismissAgentInfo}>×</button>
         </div>
       )}
       <header className="app-header">
@@ -341,7 +384,10 @@ sequenceDiagram
                   <TaskList
                     content={currentContent || ''}
                     onChange={(content) => saveFile('tasks', content)}
-                    /* Add more props for review and workflow as needed */
+                    reviewStatus={reviewStatus[activeTab]}
+                    onReview={(status) => handleReview(activeTab, status)}
+                    onRegenerate={() => handleRegenerate(activeTab)}
+                    onViewModeChange={setCurrentViewMode}
                   />
                 ) : (
                   <MarkdownEditor
@@ -354,6 +400,7 @@ sequenceDiagram
                     codebaseInfo={codebaseInfo}
                     showPreviewAfterSave={showPreviewAfterSave}
                     isRequirements={activeTab === 'requirements'}
+                    onViewModeChange={setCurrentViewMode}
                   />
                 )}
               </ErrorBoundary>
