@@ -313,6 +313,7 @@ sequenceDiagram
       )}
       <header className="app-header">
         <h1>SpecDev - Specification Development</h1>
+        <div className="version-info">v{__APP_VERSION__}</div>
       </header>
 
       <div className="feature-selector">

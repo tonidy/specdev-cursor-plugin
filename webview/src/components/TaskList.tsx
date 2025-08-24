@@ -32,9 +32,10 @@ const TaskList: React.FC<TaskListProps> = ({
   const [editContent, setEditContent] = useState(content);
   const [showNextPrompt, setShowNextPrompt] = useState(false);
   const [completedTask, setCompletedTask] = useState<string | null>(null);
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeout = useRef<number | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const isExternalSync = useRef<boolean>(false);
 
   useEffect(() => {
     setEditContent(content);
@@ -43,15 +44,18 @@ const TaskList: React.FC<TaskListProps> = ({
   // Sync with external view mode
   useEffect(() => {
     if (externalViewMode && externalViewMode !== viewMode) {
+      isExternalSync.current = true;
       setViewMode(externalViewMode);
     }
-  }, [externalViewMode]);
+  }, [externalViewMode, viewMode]);
 
-  // Notify parent component when view mode changes
+  // Notify parent component when view mode changes (but not during external sync)
   useEffect(() => {
-    if (onViewModeChange) {
+    if (onViewModeChange && !isExternalSync.current) {
       onViewModeChange(viewMode);
     }
+    // Reset the flag after the effect
+    isExternalSync.current = false;
   }, [viewMode, onViewModeChange]);
 
   // Debounced auto-save

@@ -11,12 +11,24 @@
   padding: 16px;
   border-bottom: 1px solid var(--vscode-panel-border);
   background-color: var(--vscode-panel-background);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .app-header h1 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+.version-info {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  background-color: var(--vscode-badge-background);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
 }
 
 .feature-selector {
