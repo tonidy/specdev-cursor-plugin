@@ -21,7 +21,7 @@ console.log("✅ Extension built successfully");
 
 console.log("🔨 Building webview...");
 
-// Build the webview React app
+// Build the webview React app with Vite (builds directly to dist/webview)
 try {
   execSync("cd webview && npm run build", { stdio: "inherit" });
   console.log("✅ Webview built successfully");
@@ -30,22 +30,12 @@ try {
   process.exit(1);
 }
 
-console.log("📦 Copying webview build to dist...");
-
-// Ensure dist directory exists
-if (!existsSync("dist")) {
-  mkdirSync("dist", { recursive: true });
-}
-
-// Copy webview build to dist/webview
-const webviewBuildPath = join("webview", "build");
+// Vite already builds to dist/webview, so no need to copy
 const distWebviewPath = join("dist", "webview");
-
-if (existsSync(webviewBuildPath)) {
-  cpSync(webviewBuildPath, distWebviewPath, { recursive: true });
-  console.log("✅ Webview files copied to dist/webview");
+if (existsSync(distWebviewPath)) {
+  console.log("✅ Webview files built to dist/webview");
 } else {
-  console.error("❌ Webview build folder not found at:", webviewBuildPath);
+  console.error("❌ Webview build folder not found at:", distWebviewPath);
   process.exit(1);
 }
 

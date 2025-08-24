@@ -432,33 +432,95 @@ sequenceDiagram
     }
   }
 
+  private getNonce(length = 32): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let nonce = '';
+    for (let i = 0; i < length; i++) {
+      nonce += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return nonce;
+  }
+
   private getHtmlForWebview(webview: vscode.Webview): string {
-    // Try to serve the built React app
-    const webviewPath = vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview');
-    const indexPath = vscode.Uri.joinPath(webviewPath, 'index.html');
-    
+    const webviewRoot = vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview');
+    const manifestPath = vscode.Uri.joinPath(webviewRoot, '.vite', 'manifest.json');
+    const indexPath = vscode.Uri.joinPath(webviewRoot, 'index.html');
+    const nonce = this.getNonce();
+
     try {
+      // Check if we have a manifest.json from Vite
+      if (fs.existsSync(manifestPath.fsPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath.fsPath, 'utf8'));
+        const entry = manifest['index.html'];
+        
+        if (entry) {
+          // Get the main JS file
+          const scriptFile = entry.file;
+          const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewRoot, scriptFile));
+          
+          // Get CSS files
+          const styleUris = (entry.css || []).map((cssFile: string) =>
+            webview.asWebviewUri(vscode.Uri.joinPath(webviewRoot, cssFile))
+          );
+
+          // Build CSP
+          const csp = [
+            "default-src 'none'",
+            `img-src ${webview.cspSource} https: data:`,
+            `font-src ${webview.cspSource}`,
+            `style-src ${webview.cspSource} 'unsafe-inline'`,
+            `script-src 'nonce-${nonce}'`
+          ].join('; ');
+
+          // Return HTML with Vite assets
+          return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpecDev</title>
+${styleUris.map((uri: vscode.Uri) => `<link rel="stylesheet" href="${uri}">`).join('\n')}
+</head>
+<body>
+<div id="root"></div>
+<script nonce="${nonce}" type="module" src="${scriptUri}"></script>
+</body>
+</html>`;
+        }
+      }
+      
+      // Fallback: Try to load the built index.html directly
       if (fs.existsSync(indexPath.fsPath)) {
         let html = fs.readFileSync(indexPath.fsPath, 'utf8');
         
-        // Replace relative paths with webview URIs
-        const staticPath = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'static'));
-        html = html.replace(/\/static\//g, `${staticPath.toString()}/`);
+        // Get base URI for webview
+        const baseUri = webview.asWebviewUri(webviewRoot);
         
-        // Add CSP and other necessary modifications
-        html = html.replace(
-          '<head>',
-          `<head>
-          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">`
-        );
+        // Replace relative paths with webview URIs
+        html = html.replace(/href="\//g, `href="${baseUri}/`);
+        html = html.replace(/src="\//g, `src="${baseUri}/`);
+        html = html.replace(/href="assets\//g, `href="${baseUri}/assets/`);
+        html = html.replace(/src="assets\//g, `src="${baseUri}/assets/`);
+        
+        // Add CSP
+        const csp = `<meta http-equiv="Content-Security-Policy" content="
+          default-src 'none';
+          img-src ${webview.cspSource} https: data:;
+          script-src ${webview.cspSource} 'unsafe-inline';
+          style-src ${webview.cspSource} 'unsafe-inline';
+          font-src ${webview.cspSource};
+        ">`;
+        
+        html = html.replace('<head>', `<head>\n${csp}`);
         
         return html;
       }
     } catch (error) {
-      console.error('Failed to load React webview:', error);
+      console.error('Failed to load Vite webview:', error);
     }
     
-    // Fallback to inline HTML if React build is not available
+    // Fallback to inline HTML if build is not available
     return this.getFallbackHtml();
   }
 
