@@ -263,7 +263,7 @@ sequenceDiagram
       {showAgentInfo && (
         <div className="agent-info-banner">
           <span>
-            <b>Note:</b> Document generation (requirements, design, tasks) is performed by the <b>Cursor agent/chat</b>, not directly by this extension. Use the agent to generate and review documents. <a href="https://github.com/yourusername/specdev-cursor-plugin#kiro-workflow--agent-integration" target="_blank" rel="noopener noreferrer">Learn more</a>.
+            <b>Note:</b> Document generation (requirements, design, tasks) is performed by the <b>Cursor agent/chat</b>, not directly by this extension. Use the agent to generate and review documents. <a href="https://github.com/tonidy/specdev-cursor-plugin#kiro-workflow--agent-integration" target="_blank" rel="noopener noreferrer">Learn more</a>.
           </span>
           <button className="close-banner" onClick={() => setShowAgentInfo(false)}>×</button>
         </div>

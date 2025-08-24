@@ -17,7 +17,7 @@ SpecDev is a VS Code/Cursor extension that implements a Kiro IDE-style workflow 
 
 1. Clone or download the project:
    ```bash
-   git clone https://github.com/yourusername/specdev-cursor-plugin.git
+   git clone https://github.com/tonidy/specdev-cursor-plugin.git
    cd specdev-cursor-plugin
    ```
 
