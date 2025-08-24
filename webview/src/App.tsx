@@ -388,6 +388,7 @@ sequenceDiagram
                     onReview={(status) => handleReview(activeTab, status)}
                     onRegenerate={() => handleRegenerate(activeTab)}
                     onViewModeChange={setCurrentViewMode}
+                    viewMode={currentViewMode}
                   />
                 ) : (
                   <MarkdownEditor

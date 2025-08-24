@@ -11,6 +11,7 @@ interface TaskListProps {
   onReview?: (status: 'approved' | 'rejected') => void;
   onRegenerate?: () => void;
   onViewModeChange?: (viewMode: 'edit' | 'preview' | 'split') => void;
+  viewMode?: 'edit' | 'preview' | 'split';
 }
 
 type ViewMode = 'edit' | 'preview' | 'split';
@@ -24,7 +25,8 @@ const TaskList: React.FC<TaskListProps> = ({
   reviewStatus = undefined,
   onReview,
   onRegenerate,
-  onViewModeChange
+  onViewModeChange,
+  viewMode: externalViewMode
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [editContent, setEditContent] = useState(content);
@@ -37,6 +39,13 @@ const TaskList: React.FC<TaskListProps> = ({
   useEffect(() => {
     setEditContent(content);
   }, [content]);
+
+  // Sync with external view mode
+  useEffect(() => {
+    if (externalViewMode && externalViewMode !== viewMode) {
+      setViewMode(externalViewMode);
+    }
+  }, [externalViewMode]);
 
   // Notify parent component when view mode changes
   useEffect(() => {

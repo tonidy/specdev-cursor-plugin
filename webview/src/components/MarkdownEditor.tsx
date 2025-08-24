@@ -8,7 +8,6 @@ interface MarkdownEditorProps {
   reviewStatus?: 'pending' | 'approved' | 'rejected';
   onReview?: (status: 'approved' | 'rejected') => void;
   onRegenerate?: () => void;
-  codebaseInfo?: any;
   showPreviewAfterSave?: boolean;
   isRequirements?: boolean;
   onViewModeChange?: (viewMode: 'edit' | 'preview' | 'split') => void;
@@ -23,7 +22,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   reviewStatus = undefined,
   onReview,
   onRegenerate,
-  codebaseInfo,
   showPreviewAfterSave = false,
   isRequirements = false,
   onViewModeChange
@@ -91,61 +89,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
 
 
-  const CodebaseInfoComponent = () => {
-    if (!codebaseInfo || codebaseInfo.error) return null;
-
-    return (
-      <div className="codebase-info">
-        <h4>🔍 Existing Codebase Analysis</h4>
-
-        {codebaseInfo.technologies && codebaseInfo.technologies.length > 0 && (
-          <div className="tech-section">
-            <strong>Technologies Detected:</strong>
-            <div className="tech-badges">
-              {codebaseInfo.technologies.map((tech: string, index: number) => (
-                <span key={index} className="tech-badge">{tech}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {codebaseInfo.packageFiles && codebaseInfo.packageFiles.length > 0 && (
-          <div className="dependencies-section">
-            <strong>Key Dependencies:</strong>
-            <div className="dependency-list">
-              {codebaseInfo.packageFiles[0].dependencies?.slice(0, 8).map((dep: string, index: number) => (
-                <span key={index} className="dependency-item">{dep}</span>
-              ))}
-              {codebaseInfo.packageFiles[0].dependencies?.length > 8 && (
-                <span className="more-deps">+{codebaseInfo.packageFiles[0].dependencies.length - 8} more</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {codebaseInfo.sourceFiles && codebaseInfo.sourceFiles.length > 0 && (
-          <div className="source-structure">
-            <strong>Source Structure:</strong>
-            {codebaseInfo.sourceFiles.map((dir: any, index: number) => (
-              <div key={index} className="source-dir">
-                <div className="dir-name">📁 {dir.directory}/</div>
-                {dir.files && dir.files.slice(0, 3).map((file: string, fileIndex: number) => (
-                  <div key={fileIndex} className="file-item">  📄 {file}</div>
-                ))}
-                {dir.files && dir.files.length > 3 && (
-                  <div className="more-files">  ... and {dir.files.length - 3} more files</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="analysis-note">
-          <em>💡 Consider how your requirements align with the existing codebase structure and technologies.</em>
-        </div>
-      </div>
-    );
-  };
 
   // Review checkpoint banner
   const renderReviewBanner = () => {
@@ -218,7 +161,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       <div className={`editor-content ${viewMode === 'split' ? 'split-view' : ''}`}>
         {viewMode === 'preview' ? (
           <div className="markdown-preview" ref={previewRef}>
-            {isRequirements && codebaseInfo && <CodebaseInfoComponent />}
             <MarkdownRenderer content={content} enableMermaid={enableMermaid} />
           </div>
         ) : viewMode === 'edit' ? (
